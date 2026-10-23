@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Кросворд: Методи дослідження клітин</title>
+  <style>
+    /* Дефолтний строгий стиль: прямокутні форми, без заокруглень (border-radius: 0), класична чітка сітка */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      border-radius: 0 !important;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      background: #f4f4f4;
+      color: #000;
+      line-height: 1.4;
+      padding: 16px;
+    }
+    .wrapper {
+      max-width: 1240px;
+      margin: 0 auto;
+      background: #fff;
+      border: 2px solid #222;
+      padding: 18px;
+    }
+    header {
+      border-bottom: 2px solid #222;
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: bold;
+      text-transform: uppercase;
+      background: #222;
+      color: #fff;
+      padding: 2px 6px;
+      margin-bottom: 6px;
+      letter-spacing: 0.5px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .meta-bar {
+      font-size: 13px;
+      color: #333;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .meta-bar span {
+      background: #eee;
+      border: 1px solid #999;
+      padding: 2px 8px;
+    }
+    .instructions {
+      margin-top: 10px;
+      font-size: 12px;
+      background: #fdfdfd;
+      border: 1px solid #bbb;
+      padding: 8px 10px;
+      color: #333;
+    }
+
+    /* Панель керування */
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #ccc;
+    }
+    button {
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      background: #fff;
+      color: #000;
+      border: 1px solid #000;
+      padding: 6px 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      user-select: none;
+    }
+    button:hover {
+      background: #e8e8e8;
+    }
+    button:active {
+      background: #d0d0d0;
+    }
+    button.btn-primary {
+      background: #000;
+      color: #fff;
+    }
+    button.btn-primary:hover {
+      background: #333;
+    }
+    .status-box {
+      font-size: 13px;
+      font-weight: bold;
+      padding: 6px 10px;
+      border: 1px solid transparent;
+      display: none;
+    }
+    .status-box.success {
+      display: inline-block;
+      background: #d4edda;
+      color: #155724;
+      border-color: #c3e6cb;
+    }
+    .status-box.warn {
+      display: inline-block;
+      background: #fff3cd;
+      color: #856404;
+      border-color: #ffeeba;
+    }
+
+    /* Основний блок: сітка + список запитань */
+    .main-grid-area {
+      display: flex;
+      gap: 20px;
+      align-items: flex-start;
+      margin-bottom: 24px;
+    }
+    @media (max-width: 1060px) {
+      .main-grid-area {
+        flex-direction: column;
+      }
+    }
+
+    /* Сітка кросворду */
+    .crossword-container {
+      flex: 0 0 auto;
+      overflow-x: auto;
+      background: #fff;
+      border: 1px solid #000;
+      padding: 6px;
+    }
+    .crossword-grid {
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    .cell {
+      width: 29px;
+      height: 29px;
+      position: relative;
+      background: #eaeaea;
+      border: 1px solid #ccc;
+      padding: 0;
+      text-align: center;
+      vertical-align: middle;
+    }
+    .cell.active {
+      background: #fff;
+      border: 1px solid #000;
+      cursor: pointer;
+    }
+    .cell.in-word {
+      background: #e6eef8 !important;
+    }
+    .cell.in-focus {
+      background: #fff8bd !important;
+      outline: 2px solid #000 !important;
+      z-index: 4;
+    }
+    .cell.state-correct {
+      background: #d1e7dd !important;
+      color: #0f5132 !important;
+    }
+    .cell.state-wrong {
+      background: #f8d7da !important;
+      color: #842029 !important;
+    }
+    .cell-num {
+      position: absolute;
+      top: 1px;
+      left: 1px;
+      font-size: 8px;
+      font-weight: bold;
+      line-height: 8px;
+      color: #000;
+      pointer-events: none;
+      z-index: 2;
+    }
+    .cell input {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: transparent;
+      text-align: center;
+      font-size: 15px;
+      font-weight: bold;
+      font-family: Consolas, "Courier New", monospace;
+      color: inherit;
+      text-transform: uppercase;
+      outline: none;
+      padding: 0;
+      margin: 0;
+      line-height: 29px;
+      cursor: inherit;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Колонка запитань */
+    .clues-container {
+      flex: 1 1 380px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .clue-columns {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 680px) {
+      .clue-columns {
+        grid-template-columns: 1fr;
+      }
+    }
+    .clue-card {
+      background: #fff;
+      border: 1px solid #000;
+      padding: 10px 12px;
+    }
+    .clue-card h2 {
+      font-size: 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      border-bottom: 1px solid #000;
+      padding-bottom: 4px;
+      margin-bottom: 8px;
+    }
+    .clue-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .clue-item {
+      font-size: 12.5px;
+      padding: 5px 8px;
+      border: 1px solid #ddd;
+      background: #fafafa;
+      cursor: pointer;
+    }
+    .clue-item:hover {
+      background: #f0f0f0;
+      border-color: #666;
+    }
+    .clue-item.active-clue {
+      background: #000;
+      color: #fff;
+      border-color: #000;
+    }
+    .clue-item.active-clue .clue-num {
+      color: #fff;
+    }
+    .clue-item.active-clue small {
+      color: #ccc !important;
+    }
+    .clue-item.done {
+      opacity: 0.65;
+      text-decoration: line-through;
+    }
+    .clue-num {
+      font-weight: bold;
+      margin-right: 4px;
+    }
+
+    /* Секція схеми, запитань та відповідей */
+    .doc-section {
+      border-top: 2px solid #000;
+      padding-top: 14px;
+      margin-top: 16px;
+    }
+    .doc-header {
+      margin-bottom: 12px;
+    }
+    .doc-header h2 {
+      font-size: 15px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    table.answers-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+    table.answers-table th, table.answers-table td {
+      border: 1px solid #000;
+      padding: 6px 8px;
+      text-align: left;
+    }
+    table.answers-table th {
+      background: #eaeaea;
+      font-weight: bold;
+    }
+    table.answers-table tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+  </style>
+</head>
+<body>
+
+<div class="wrapper">
+  <header>
+    <div class="badge">Біологія • Цитологія</div>
+    <h1>Тема: Методи дослідження клітин</h1>
+    <div class="meta-bar">
+      <span><strong>Формат:</strong> Електронний кросворд</span>
+      <span><strong>Кількість слів:</strong> 11</span>
+      <span><strong>Розмір сітки:</strong> 20 × 22</span>
+    </div>
+    <div class="instructions">
+      <strong>Як заповнювати:</strong> Клікніть на клітинку або на запитання у списку. Вводьте літери (автоматично стають великими). Повторний клік на клітинці перетину перемикає напрямок (горизонталь/вертикаль). Стрілки на клавіатурі — рух по сітці; <em>Backspace</em> — очищення літери; <em>Tab</em> — наступне слово.
+    </div>
+  </header>
+
+  <!-- Панель керування -->
+  <div class="controls">
+    <button type="button" class="btn-primary" id="btn-check">✓ Перевірити</button>
+    <button type="button" id="btn-solution">Показати відповіді</button>
+    <button type="button" id="btn-clear">Очистити</button>
+    <span class="status-box" id="status-box"></span>
+  </div>
+
+  <div class="main-grid-area">
+    <!-- Сітка кросворду -->
+    <div class="crossword-container">
+      <table class="crossword-grid" id="grid-table">
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- Запитання -->
+    <div class="clues-container">
+      <div class="clue-columns">
+        <div class="clue-card">
+          <h2>По горизонталі</h2>
+          <ul class="clue-list" id="clues-across"></ul>
+        </div>
+        <div class="clue-card">
+          <h2>По вертикалі</h2>
+          <ul class="clue-list" id="clues-down"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Таблиця відповідей та схема (відкрито за замовчуванням без зайвих кнопок) -->
+  <section class="doc-section">
+    <div class="doc-header">
+      <h2>Схема кросворду, запитання та відповіді</h2>
+    </div>
+    <div id="answers-panel">
+      <table class="answers-table">
+        <thead>
+          <tr>
+            <th style="width: 40px;">№</th>
+            <th style="width: 120px;">Напрямок</th>
+            <th style="width: 160px;">Відповідь (термін)</th>
+            <th style="width: 60px;">Букв</th>
+            <th>Запитання / Визначення</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>2</strong></td>
+            <td>По горизонталі</td>
+            <td><strong>ЕЛЕКТРОФОРЕЗ</strong></td>
+            <td>12</td>
+            <td>Метод розділення заряджених біополімерів (ДНК, білків) у гелі під дією електричного поля.</td>
+          </tr>
+          <tr>
+            <td><strong>5</strong></td>
+            <td>По горизонталі</td>
+            <td><strong>МІКРОТОМ</strong></td>
+            <td>8</td>
+            <td>Спеціальний лабораторний ніж/прилад для виготовлення надтонких зрізів біологічного матеріалу.</td>
+          </tr>
+          <tr>
+            <td><strong>8</strong></td>
+            <td>По горизонталі</td>
+            <td><strong>КУЛЬТИВУВАННЯ</strong></td>
+            <td>13</td>
+            <td>Метод вирощування та розмноження клітин або тканин поза організмом на штучних поживних середовищах in vitro.</td>
+          </tr>
+          <tr>
+            <td><strong>9</strong></td>
+            <td>По горизонталі</td>
+            <td><strong>МІКРОСКОПІЯ</strong></td>
+            <td>11</td>
+            <td>Основний оптичний або електронний метод вивчення форми, будови та розмірів клітин і субклітинних структур.</td>
+          </tr>
+          <tr>
+            <td><strong>10</strong></td>
+            <td>По горизонталі</td>
+            <td><strong>ФІКСАЦІЯ</strong></td>
+            <td>8</td>
+            <td>Швидка зупинка життєвих процесів клітини спиртом, формаліном чи холодом із максимальним збереженням нативної структури.</td>
+          </tr>
+          <tr>
+            <td><strong>11</strong></td>
+            <td>По горизонталі</td>
+            <td><strong>ЦИТОХІМІЯ</strong></td>
+            <td>9</td>
+            <td>Метод визначення хімічного складу клітини та просторового розташування сполук за допомогою специфічних якісних реакцій.</td>
+          </tr>
+          <tr>
+            <td><strong>1</strong></td>
+            <td>По вертикалі</td>
+            <td><strong>ЦЕНТРИФУГУВАННЯ</strong></td>
+            <td>15</td>
+            <td>Метод розділення клітинних компонентів та органел за масою і густиною під дією відцентрової сили.</td>
+          </tr>
+          <tr>
+            <td><strong>3</strong></td>
+            <td>По вертикалі</td>
+            <td><strong>ГОМОГЕНІЗАЦІЯ</strong></td>
+            <td>13</td>
+            <td>Механічне або ультразвукове подрібнення тканин і руйнування клітин для отримання однорідної біологічної суспензії.</td>
+          </tr>
+          <tr>
+            <td><strong>4</strong></td>
+            <td>По вертикалі</td>
+            <td><strong>ФАРБУВАННЯ</strong></td>
+            <td>10</td>
+            <td>Нанесення спеціальних барвників для створення оптичного контрасту між прозорими внутрішньоклітинними структурами.</td>
+          </tr>
+          <tr>
+            <td><strong>6</strong></td>
+            <td>По вертикалі</td>
+            <td><strong>ХРОМАТОГРАФІЯ</strong></td>
+            <td>13</td>
+            <td>Метод розділення суміші речовин (пігментів, білків), заснований на різній швидкості їх переміщення у рухомій і нерухомій фазах.</td>
+          </tr>
+          <tr>
+            <td><strong>7</strong></td>
+            <td>По вертикалі</td>
+            <td><strong>АВТОРАДІОГРАФІЯ</strong></td>
+            <td>15</td>
+            <td>Метод дослідження локалізації та переміщення речовин у клітині за допомогою радіоактивних ізотопів (мічених атомів).</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+  const DATA = {"topic": "Методи дослідження клітин", "discipline": "Біологія (цитологія)", "rows": 20, "cols": 22, "words": [{"num": 1, "word": "ЦЕНТРИФУГУВАННЯ", "row": 0, "col": 10, "dir": "down", "clue": "Метод розділення клітинних компонентів та органел за масою і густиною під дією відцентрової сили."}, {"num": 2, "word": "ЕЛЕКТРОФОРЕЗ", "row": 1, "col": 0, "dir": "across", "clue": "Метод розділення заряджених біополімерів (ДНК, білків) у гелі під дією електричного поля."}, {"num": 3, "word": "ГОМОГЕНІЗАЦІЯ", "row": 1, "col": 20, "dir": "down", "clue": "Механічне або ультразвукове подрібнення тканин і руйнування клітин для отримання однорідної біологічної суспензії."}, {"num": 4, "word": "ФАРБУВАННЯ", "row": 2, "col": 15, "dir": "down", "clue": "Нанесення спеціальних барвників для створення оптичного контрасту між прозорими внутрішньоклітинними структурами."}, {"num": 5, "word": "МІКРОТОМ", "row": 3, "col": 5, "dir": "across", "clue": "Спеціальний лабораторний ніж/прилад для виготовлення надтонких зрізів біологічного матеріалу."}, {"num": 6, "word": "ХРОМАТОГРАФІЯ", "row": 3, "col": 18, "dir": "down", "clue": "Метод розділення суміші речовин (пігментів, білків), заснований на різній швидкості їх переміщення у рухомій і нерухомій фазах."}, {"num": 7, "word": "АВТОРАДІОГРАФІЯ", "row": 5, "col": 13, "dir": "down", "clue": "Метод дослідження локалізації та переміщення речовин у клітині за допомогою радіоактивних ізотопів (мічених атомів)."}, {"num": 8, "word": "КУЛЬТИВУВАННЯ", "row": 7, "col": 9, "dir": "across", "clue": "Метод вирощування та розмноження клітин або тканин поза організмом на штучних поживних середовищах in vitro."}, {"num": 9, "word": "МІКРОСКОПІЯ", "row": 14, "col": 0, "dir": "across", "clue": "Основний оптичний або електронний метод вивчення форми, будови та розмірів клітин і субклітинних структур."}, {"num": 10, "word": "ФІКСАЦІЯ", "row": 16, "col": 9, "dir": "across", "clue": "Швидка зупинка життєвих процесів клітини спиртом, формаліном чи холодом із максимальним збереженням нативної структури."}, {"num": 11, "word": "ЦИТОХІМІЯ", "row": 18, "col": 8, "dir": "across", "clue": "Метод визначення хімічного складу клітини та просторового розташування сполук за допомогою специфічних якісних реакцій."}], "cells": {"0_10": {"r": 0, "c": 10, "char": "Ц", "num": 1, "words": [{"num": 1, "dir": "down", "idx": 0}]}, "1_10": {"r": 1, "c": 10, "char": "Е", "num": null, "words": [{"num": 1, "dir": "down", "idx": 1}, {"num": 2, "dir": "across", "idx": 10}]}, "2_10": {"r": 2, "c": 10, "char": "Н", "num": null, "words": [{"num": 1, "dir": "down", "idx": 2}]}, "3_10": {"r": 3, "c": 10, "char": "Т", "num": null, "words": [{"num": 1, "dir": "down", "idx": 3}, {"num": 5, "dir": "across", "idx": 5}]}, "4_10": {"r": 4, "c": 10, "char": "Р", "num": null, "words": [{"num": 1, "dir": "down", "idx": 4}]}, "5_10": {"r": 5, "c": 10, "char": "И", "num": null, "words": [{"num": 1, "dir": "down", "idx": 5}]}, "6_10": {"r": 6, "c": 10, "char": "Ф", "num": null, "words": [{"num": 1, "dir": "down", "idx": 6}]}, "7_10": {"r": 7, "c": 10, "char": "У", "num": null, "words": [{"num": 1, "dir": "down", "idx": 7}, {"num": 8, "dir": "across", "idx": 1}]}, "8_10": {"r": 8, "c": 10, "char": "Г", "num": null, "words": [{"num": 1, "dir": "down", "idx": 8}]}, "9_10": {"r": 9, "c": 10, "char": "У", "num": null, "words": [{"num": 1, "dir": "down", "idx": 9}]}, "10_10": {"r": 10, "c": 10, "char": "В", "num": null, "words": [{"num": 1, "dir": "down", "idx": 10}]}, "11_10": {"r": 11, "c": 10, "char": "А", "num": null, "words": [{"num": 1, "dir": "down", "idx": 11}]}, "12_10": {"r": 12, "c": 10, "char": "Н", "num": null, "words": [{"num": 1, "dir": "down", "idx": 12}]}, "13_10": {"r": 13, "c": 10, "char": "Н", "num": null, "words": [{"num": 1, "dir": "down", "idx": 13}]}, "14_10": {"r": 14, "c": 10, "char": "Я", "num": null, "words": [{"num": 1, "dir": "down", "idx": 14}, {"num": 9, "dir": "across", "idx": 10}]}, "1_0": {"r": 1, "c": 0, "char": "Е", "num": 2, "words": [{"num": 2, "dir": "across", "idx": 0}]}, "1_1": {"r": 1, "c": 1, "char": "Л", "num": null, "words": [{"num": 2, "dir": "across", "idx": 1}]}, "1_2": {"r": 1, "c": 2, "char": "Е", "num": null, "words": [{"num": 2, "dir": "across", "idx": 2}]}, "1_3": {"r": 1, "c": 3, "char": "К", "num": null, "words": [{"num": 2, "dir": "across", "idx": 3}]}, "1_4": {"r": 1, "c": 4, "char": "Т", "num": null, "words": [{"num": 2, "dir": "across", "idx": 4}]}, "1_5": {"r": 1, "c": 5, "char": "Р", "num": null, "words": [{"num": 2, "dir": "across", "idx": 5}]}, "1_6": {"r": 1, "c": 6, "char": "О", "num": null, "words": [{"num": 2, "dir": "across", "idx": 6}]}, "1_7": {"r": 1, "c": 7, "char": "Ф", "num": null, "words": [{"num": 2, "dir": "across", "idx": 7}]}, "1_8": {"r": 1, "c": 8, "char": "О", "num": null, "words": [{"num": 2, "dir": "across", "idx": 8}]}, "1_9": {"r": 1, "c": 9, "char": "Р", "num": null, "words": [{"num": 2, "dir": "across", "idx": 9}]}, "1_11": {"r": 1, "c": 11, "char": "З", "num": null, "words": [{"num": 2, "dir": "across", "idx": 11}]}, "1_20": {"r": 1, "c": 20, "char": "Г", "num": 3, "words": [{"num": 3, "dir": "down", "idx": 0}]}, "2_20": {"r": 2, "c": 20, "char": "О", "num": null, "words": [{"num": 3, "dir": "down", "idx": 1}]}, "3_20": {"r": 3, "c": 20, "char": "М", "num": null, "words": [{"num": 3, "dir": "down", "idx": 2}]}, "4_20": {"r": 4, "c": 20, "char": "О", "num": null, "words": [{"num": 3, "dir": "down", "idx": 3}]}, "5_20": {"r": 5, "c": 20, "char": "Г", "num": null, "words": [{"num": 3, "dir": "down", "idx": 4}]}, "6_20": {"r": 6, "c": 20, "char": "Е", "num": null, "words": [{"num": 3, "dir": "down", "idx": 5}]}, "7_20": {"r": 7, "c": 20, "char": "Н", "num": null, "words": [{"num": 3, "dir": "down", "idx": 6}, {"num": 8, "dir": "across", "idx": 11}]}, "8_20": {"r": 8, "c": 20, "char": "І", "num": null, "words": [{"num": 3, "dir": "down", "idx": 7}]}, "9_20": {"r": 9, "c": 20, "char": "З", "num": null, "words": [{"num": 3, "dir": "down", "idx": 8}]}, "10_20": {"r": 10, "c": 20, "char": "А", "num": null, "words": [{"num": 3, "dir": "down", "idx": 9}]}, "11_20": {"r": 11, "c": 20, "char": "Ц", "num": null, "words": [{"num": 3, "dir": "down", "idx": 10}]}, "12_20": {"r": 12, "c": 20, "char": "І", "num": null, "words": [{"num": 3, "dir": "down", "idx": 11}]}, "13_20": {"r": 13, "c": 20, "char": "Я", "num": null, "words": [{"num": 3, "dir": "down", "idx": 12}]}, "2_15": {"r": 2, "c": 15, "char": "Ф", "num": 4, "words": [{"num": 4, "dir": "down", "idx": 0}]}, "3_15": {"r": 3, "c": 15, "char": "А", "num": null, "words": [{"num": 4, "dir": "down", "idx": 1}]}, "4_15": {"r": 4, "c": 15, "char": "Р", "num": null, "words": [{"num": 4, "dir": "down", "idx": 2}]}, "5_15": {"r": 5, "c": 15, "char": "Б", "num": null, "words": [{"num": 4, "dir": "down", "idx": 3}]}, "6_15": {"r": 6, "c": 15, "char": "У", "num": null, "words": [{"num": 4, "dir": "down", "idx": 4}]}, "7_15": {"r": 7, "c": 15, "char": "В", "num": null, "words": [{"num": 4, "dir": "down", "idx": 5}, {"num": 8, "dir": "across", "idx": 6}]}, "8_15": {"r": 8, "c": 15, "char": "А", "num": null, "words": [{"num": 4, "dir": "down", "idx": 6}]}, "9_15": {"r": 9, "c": 15, "char": "Н", "num": null, "words": [{"num": 4, "dir": "down", "idx": 7}]}, "10_15": {"r": 10, "c": 15, "char": "Н", "num": null, "words": [{"num": 4, "dir": "down", "idx": 8}]}, "11_15": {"r": 11, "c": 15, "char": "Я", "num": null, "words": [{"num": 4, "dir": "down", "idx": 9}]}, "3_5": {"r": 3, "c": 5, "char": "М", "num": 5, "words": [{"num": 5, "dir": "across", "idx": 0}]}, "3_6": {"r": 3, "c": 6, "char": "І", "num": null, "words": [{"num": 5, "dir": "across", "idx": 1}]}, "3_7": {"r": 3, "c": 7, "char": "К", "num": null, "words": [{"num": 5, "dir": "across", "idx": 2}]}, "3_8": {"r": 3, "c": 8, "char": "Р", "num": null, "words": [{"num": 5, "dir": "across", "idx": 3}]}, "3_9": {"r": 3, "c": 9, "char": "О", "num": null, "words": [{"num": 5, "dir": "across", "idx": 4}]}, "3_11": {"r": 3, "c": 11, "char": "О", "num": null, "words": [{"num": 5, "dir": "across", "idx": 6}]}, "3_12": {"r": 3, "c": 12, "char": "М", "num": null, "words": [{"num": 5, "dir": "across", "idx": 7}]}, "3_18": {"r": 3, "c": 18, "char": "Х", "num": 6, "words": [{"num": 6, "dir": "down", "idx": 0}]}, "4_18": {"r": 4, "c": 18, "char": "Р", "num": null, "words": [{"num": 6, "dir": "down", "idx": 1}]}, "5_18": {"r": 5, "c": 18, "char": "О", "num": null, "words": [{"num": 6, "dir": "down", "idx": 2}]}, "6_18": {"r": 6, "c": 18, "char": "М", "num": null, "words": [{"num": 6, "dir": "down", "idx": 3}]}, "7_18": {"r": 7, "c": 18, "char": "А", "num": null, "words": [{"num": 6, "dir": "down", "idx": 4}, {"num": 8, "dir": "across", "idx": 9}]}, "8_18": {"r": 8, "c": 18, "char": "Т", "num": null, "words": [{"num": 6, "dir": "down", "idx": 5}]}, "9_18": {"r": 9, "c": 18, "char": "О", "num": null, "words": [{"num": 6, "dir": "down", "idx": 6}]}, "10_18": {"r": 10, "c": 18, "char": "Г", "num": null, "words": [{"num": 6, "dir": "down", "idx": 7}]}, "11_18": {"r": 11, "c": 18, "char": "Р", "num": null, "words": [{"num": 6, "dir": "down", "idx": 8}]}, "12_18": {"r": 12, "c": 18, "char": "А", "num": null, "words": [{"num": 6, "dir": "down", "idx": 9}]}, "13_18": {"r": 13, "c": 18, "char": "Ф", "num": null, "words": [{"num": 6, "dir": "down", "idx": 10}]}, "14_18": {"r": 14, "c": 18, "char": "І", "num": null, "words": [{"num": 6, "dir": "down", "idx": 11}]}, "15_18": {"r": 15, "c": 18, "char": "Я", "num": null, "words": [{"num": 6, "dir": "down", "idx": 12}]}, "5_13": {"r": 5, "c": 13, "char": "А", "num": 7, "words": [{"num": 7, "dir": "down", "idx": 0}]}, "6_13": {"r": 6, "c": 13, "char": "В", "num": null, "words": [{"num": 7, "dir": "down", "idx": 1}]}, "7_13": {"r": 7, "c": 13, "char": "Т", "num": null, "words": [{"num": 7, "dir": "down", "idx": 2}, {"num": 8, "dir": "across", "idx": 4}]}, "8_13": {"r": 8, "c": 13, "char": "О", "num": null, "words": [{"num": 7, "dir": "down", "idx": 3}]}, "9_13": {"r": 9, "c": 13, "char": "Р", "num": null, "words": [{"num": 7, "dir": "down", "idx": 4}]}, "10_13": {"r": 10, "c": 13, "char": "А", "num": null, "words": [{"num": 7, "dir": "down", "idx": 5}]}, "11_13": {"r": 11, "c": 13, "char": "Д", "num": null, "words": [{"num": 7, "dir": "down", "idx": 6}]}, "12_13": {"r": 12, "c": 13, "char": "І", "num": null, "words": [{"num": 7, "dir": "down", "idx": 7}]}, "13_13": {"r": 13, "c": 13, "char": "О", "num": null, "words": [{"num": 7, "dir": "down", "idx": 8}]}, "14_13": {"r": 14, "c": 13, "char": "Г", "num": null, "words": [{"num": 7, "dir": "down", "idx": 9}]}, "15_13": {"r": 15, "c": 13, "char": "Р", "num": null, "words": [{"num": 7, "dir": "down", "idx": 10}]}, "16_13": {"r": 16, "c": 13, "char": "А", "num": null, "words": [{"num": 7, "dir": "down", "idx": 11}, {"num": 10, "dir": "across", "idx": 4}]}, "17_13": {"r": 17, "c": 13, "char": "Ф", "num": null, "words": [{"num": 7, "dir": "down", "idx": 12}]}, "18_13": {"r": 18, "c": 13, "char": "І", "num": null, "words": [{"num": 7, "dir": "down", "idx": 13}, {"num": 11, "dir": "across", "idx": 5}]}, "19_13": {"r": 19, "c": 13, "char": "Я", "num": null, "words": [{"num": 7, "dir": "down", "idx": 14}]}, "7_9": {"r": 7, "c": 9, "char": "К", "num": 8, "words": [{"num": 8, "dir": "across", "idx": 0}]}, "7_11": {"r": 7, "c": 11, "char": "Л", "num": null, "words": [{"num": 8, "dir": "across", "idx": 2}]}, "7_12": {"r": 7, "c": 12, "char": "Ь", "num": null, "words": [{"num": 8, "dir": "across", "idx": 3}]}, "7_14": {"r": 7, "c": 14, "char": "И", "num": null, "words": [{"num": 8, "dir": "across", "idx": 5}]}, "7_16": {"r": 7, "c": 16, "char": "У", "num": null, "words": [{"num": 8, "dir": "across", "idx": 7}]}, "7_17": {"r": 7, "c": 17, "char": "В", "num": null, "words": [{"num": 8, "dir": "across", "idx": 8}]}, "7_19": {"r": 7, "c": 19, "char": "Н", "num": null, "words": [{"num": 8, "dir": "across", "idx": 10}]}, "7_21": {"r": 7, "c": 21, "char": "Я", "num": null, "words": [{"num": 8, "dir": "across", "idx": 12}]}, "14_0": {"r": 14, "c": 0, "char": "М", "num": 9, "words": [{"num": 9, "dir": "across", "idx": 0}]}, "14_1": {"r": 14, "c": 1, "char": "І", "num": null, "words": [{"num": 9, "dir": "across", "idx": 1}]}, "14_2": {"r": 14, "c": 2, "char": "К", "num": null, "words": [{"num": 9, "dir": "across", "idx": 2}]}, "14_3": {"r": 14, "c": 3, "char": "Р", "num": null, "words": [{"num": 9, "dir": "across", "idx": 3}]}, "14_4": {"r": 14, "c": 4, "char": "О", "num": null, "words": [{"num": 9, "dir": "across", "idx": 4}]}, "14_5": {"r": 14, "c": 5, "char": "С", "num": null, "words": [{"num": 9, "dir": "across", "idx": 5}]}, "14_6": {"r": 14, "c": 6, "char": "К", "num": null, "words": [{"num": 9, "dir": "across", "idx": 6}]}, "14_7": {"r": 14, "c": 7, "char": "О", "num": null, "words": [{"num": 9, "dir": "across", "idx": 7}]}, "14_8": {"r": 14, "c": 8, "char": "П", "num": null, "words": [{"num": 9, "dir": "across", "idx": 8}]}, "14_9": {"r": 14, "c": 9, "char": "І", "num": null, "words": [{"num": 9, "dir": "across", "idx": 9}]}, "16_9": {"r": 16, "c": 9, "char": "Ф", "num": 10, "words": [{"num": 10, "dir": "across", "idx": 0}]}, "16_10": {"r": 16, "c": 10, "char": "І", "num": null, "words": [{"num": 10, "dir": "across", "idx": 1}]}, "16_11": {"r": 16, "c": 11, "char": "К", "num": null, "words": [{"num": 10, "dir": "across", "idx": 2}]}, "16_12": {"r": 16, "c": 12, "char": "С", "num": null, "words": [{"num": 10, "dir": "across", "idx": 3}]}, "16_14": {"r": 16, "c": 14, "char": "Ц", "num": null, "words": [{"num": 10, "dir": "across", "idx": 5}]}, "16_15": {"r": 16, "c": 15, "char": "І", "num": null, "words": [{"num": 10, "dir": "across", "idx": 6}]}, "16_16": {"r": 16, "c": 16, "char": "Я", "num": null, "words": [{"num": 10, "dir": "across", "idx": 7}]}, "18_8": {"r": 18, "c": 8, "char": "Ц", "num": 11, "words": [{"num": 11, "dir": "across", "idx": 0}]}, "18_9": {"r": 18, "c": 9, "char": "И", "num": null, "words": [{"num": 11, "dir": "across", "idx": 1}]}, "18_10": {"r": 18, "c": 10, "char": "Т", "num": null, "words": [{"num": 11, "dir": "across", "idx": 2}]}, "18_11": {"r": 18, "c": 11, "char": "О", "num": null, "words": [{"num": 11, "dir": "across", "idx": 3}]}, "18_12": {"r": 18, "c": 12, "char": "Х", "num": null, "words": [{"num": 11, "dir": "across", "idx": 4}]}, "18_14": {"r": 18, "c": 14, "char": "М", "num": null, "words": [{"num": 11, "dir": "across", "idx": 6}]}, "18_15": {"r": 18, "c": 15, "char": "І", "num": null, "words": [{"num": 11, "dir": "across", "idx": 7}]}, "18_16": {"r": 18, "c": 16, "char": "Я", "num": null, "words": [{"num": 11, "dir": "across", "idx": 8}]}}};
+
+  let currentWordNum = null;
+  let currentDir = 'across';
+  let currentCell = null; // { r, c }
+
+  const tbody = document.querySelector('#grid-table tbody');
+  const cluesAcrossEl = document.getElementById('clues-across');
+  const cluesDownEl = document.getElementById('clues-down');
+  const statusEl = document.getElementById('status-box');
+
+  // Побудова сітки
+  function initGrid() {
+    tbody.innerHTML = '';
+    for (let r = 0; r < DATA.rows; r++) {
+      const tr = document.createElement('tr');
+      for (let c = 0; c < DATA.cols; c++) {
+        const td = document.createElement('td');
+        td.className = 'cell';
+        td.dataset.row = r;
+        td.dataset.col = c;
+
+        const cellKey = `${r}_${c}`;
+        const info = DATA.cells[cellKey];
+
+        if (info) {
+          td.classList.add('active');
+
+          if (info.num) {
+            const numSpan = document.createElement('span');
+            numSpan.className = 'cell-num';
+            numSpan.textContent = info.num;
+            td.appendChild(numSpan);
+          }
+
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.maxLength = 1;
+          input.autocomplete = 'off';
+          input.spellcheck = false;
+          input.dataset.row = r;
+          input.dataset.col = c;
+          input.dataset.char = info.char;
+
+          input.addEventListener('focus', () => onCellFocus(r, c));
+          input.addEventListener('click', () => onCellClick(r, c));
+          input.addEventListener('keydown', (e) => onCellKeyDown(e, r, c));
+          input.addEventListener('input', (e) => onCellInput(e, r, c));
+
+          td.appendChild(input);
+        }
+        tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    }
+  }
+
+  // Списки запитань
+  function initClues() {
+    cluesAcrossEl.innerHTML = '';
+    cluesDownEl.innerHTML = '';
+
+    DATA.words.forEach(w => {
+      const li = document.createElement('li');
+      li.className = 'clue-item';
+      li.id = `clue-${w.num}-${w.dir}`;
+      li.innerHTML = `<span class="clue-num">${w.num}.</span> ${w.clue} <small style="color:#555">(${w.word.length} букв)</small>`;
+
+      li.addEventListener('click', () => {
+        setWord(w.num, w.dir);
+      });
+
+      if (w.dir === 'across') {
+        cluesAcrossEl.appendChild(li);
+      } else {
+        cluesDownEl.appendChild(li);
+      }
+    });
+  }
+
+  // Вибір слова
+  function setWord(num, dir) {
+    currentWordNum = num;
+    currentDir = dir;
+
+    // Підсвічування у списку
+    document.querySelectorAll('.clue-item').forEach(el => el.classList.remove('active-clue'));
+    const clueEl = document.getElementById(`clue-${num}-${dir}`);
+    if (clueEl) {
+      clueEl.classList.add('active-clue');
+      clueEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    const wordObj = DATA.words.find(w => w.num === num && w.dir === dir);
+    if (!wordObj) return;
+
+    highlightWord(wordObj);
+
+    // Фокус на першу порожню клітинку або на першу загалом
+    const target = getFirstEmptyOrFirst(wordObj);
+    if (target) {
+      focusInput(target.r, target.c);
+    }
+  }
+
+  function highlightWord(wordObj) {
+    document.querySelectorAll('.cell.active').forEach(td => {
+      td.classList.remove('in-word');
+      td.classList.remove('in-focus');
+    });
+
+    const dr = wordObj.dir === 'across' ? 0 : 1;
+    const dc = wordObj.dir === 'across' ? 1 : 0;
+
+    for (let i = 0; i < wordObj.word.length; i++) {
+      const r = wordObj.row + dr * i;
+      const c = wordObj.col + dc * i;
+      const td = document.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
+      if (td) td.classList.add('in-word');
+    }
+  }
+
+  function getFirstEmptyOrFirst(wordObj) {
+    const dr = wordObj.dir === 'across' ? 0 : 1;
+    const dc = wordObj.dir === 'across' ? 1 : 0;
+    let first = null;
+
+    for (let i = 0; i < wordObj.word.length; i++) {
+      const r = wordObj.row + dr * i;
+      const c = wordObj.col + dc * i;
+      if (i === 0) first = { r, c };
+      const inp = document.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
+      if (inp && !inp.value.trim()) {
+        return { r, c };
+      }
+    }
+    return first;
+  }
+
+  function focusInput(r, c) {
+    const inp = document.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
+    if (inp) {
+      inp.focus();
+      inp.select();
+    }
+  }
+
+  function onCellFocus(r, c) {
+    const cellKey = `${r}_${c}`;
+    const info = DATA.cells[cellKey];
+    if (!info) return;
+
+    currentCell = { r, c };
+
+    // Чи входить клітинка у поточне вибране слово?
+    const hasCurrent = info.words.some(w => w.num === currentWordNum && w.dir === currentDir);
+    if (!hasCurrent) {
+      let match = info.words.find(w => w.dir === currentDir);
+      if (!match) {
+        match = info.words[0];
+        currentDir = match.dir;
+      }
+      currentWordNum = match.num;
+    }
+
+    const wordObj = DATA.words.find(w => w.num === currentWordNum && w.dir === currentDir);
+    if (wordObj) {
+      highlightWord(wordObj);
+    }
+
+    document.querySelectorAll('.cell').forEach(td => td.classList.remove('in-focus'));
+    const currentTd = document.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
+    if (currentTd) currentTd.classList.add('in-focus');
+
+    // Оновлюємо підсвітку в списку
+    document.querySelectorAll('.clue-item').forEach(el => el.classList.remove('active-clue'));
+    const clueEl = document.getElementById(`clue-${currentWordNum}-${currentDir}`);
+    if (clueEl) {
+      clueEl.classList.add('active-clue');
+      clueEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  function onCellClick(r, c) {
+    const cellKey = `${r}_${c}`;
+    const info = DATA.cells[cellKey];
+    if (!info) return;
+
+    // Якщо клітинка на перетині — перемикаємо напрямок
+    if (info.words.length > 1) {
+      const otherWord = info.words.find(w => w.dir !== currentDir);
+      if (otherWord) {
+        setWord(otherWord.num, otherWord.dir);
+        focusInput(r, c);
+      }
+    }
+  }
+
+  function onCellInput(e, r, c) {
+    const input = e.target;
+    const val = input.value.toUpperCase();
+    input.value = val;
+
+    input.parentElement.classList.remove('state-correct', 'state-wrong');
+    hideStatus();
+
+    if (val) {
+      advanceNext(r, c);
+    }
+  }
+
+  function onCellKeyDown(e, r, c) {
+    if (e.key === 'Backspace') {
+      const input = e.target;
+      if (!input.value) {
+        e.preventDefault();
+        retreatPrev(r, c, true);
+      } else {
+        input.value = '';
+        input.parentElement.classList.remove('state-correct', 'state-wrong');
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      stepTo(r, c + 1);
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      stepTo(r, c - 1);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      stepTo(r + 1, c);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      stepTo(r - 1, c);
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      nextWord(e.shiftKey);
+    }
+  }
+
+  function advanceNext(r, c) {
+    const wordObj = DATA.words.find(w => w.num === currentWordNum && w.dir === currentDir);
+    if (!wordObj) return;
+
+    const dr = currentDir === 'across' ? 0 : 1;
+    const dc = currentDir === 'across' ? 1 : 0;
+    const nextR = r + dr;
+    const nextC = c + dc;
+
+    const maxR = wordObj.row + dr * (wordObj.word.length - 1);
+    const maxC = wordObj.col + dc * (wordObj.word.length - 1);
+
+    if (nextR <= maxR && nextC <= maxC) {
+      focusInput(nextR, nextC);
+    }
+  }
+
+  function retreatPrev(r, c, clear) {
+    const wordObj = DATA.words.find(w => w.num === currentWordNum && w.dir === currentDir);
+    if (!wordObj) return;
+
+    const dr = currentDir === 'across' ? 0 : 1;
+    const dc = currentDir === 'across' ? 1 : 0;
+    const prevR = r - dr;
+    const prevC = c - dc;
+
+    if (prevR >= wordObj.row && prevC >= wordObj.col) {
+      const prevInp = document.querySelector(`input[data-row="${prevR}"][data-col="${prevC}"]`);
+      if (prevInp) {
+        if (clear) {
+          prevInp.value = '';
+          prevInp.parentElement.classList.remove('state-correct', 'state-wrong');
+        }
+        prevInp.focus();
+        prevInp.select();
+      }
+    }
+  }
+
+  function stepTo(r, c) {
+    const inp = document.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
+    if (inp) inp.focus();
+  }
+
+  function nextWord(backward = false) {
+    const words = DATA.words;
+    let idx = words.findIndex(w => w.num === currentWordNum && w.dir === currentDir);
+    if (idx === -1) idx = 0;
+    else {
+      idx = backward ? (idx - 1 + words.length) % words.length : (idx + 1) % words.length;
+    }
+    setWord(words[idx].num, words[idx].dir);
+  }
+
+  // Перевірка
+  function checkGrid() {
+    let correctCells = 0;
+    let totalCells = 0;
+    let solvedWords = 0;
+
+    document.querySelectorAll('.cell.active').forEach(td => {
+      td.classList.remove('state-correct', 'state-wrong');
+      const input = td.querySelector('input');
+      if (input) {
+        totalCells++;
+        const val = (input.value || '').trim().toUpperCase();
+        const expected = input.dataset.char.toUpperCase();
+        if (val === expected) {
+          td.classList.add('state-correct');
+          correctCells++;
+        } else if (val) {
+          td.classList.add('state-wrong');
+        }
+      }
+    });
+
+    DATA.words.forEach(w => {
+      const dr = w.dir === 'across' ? 0 : 1;
+      const dc = w.dir === 'across' ? 1 : 0;
+      let ok = true;
+      for (let i = 0; i < w.word.length; i++) {
+        const r = w.row + dr * i;
+        const c = w.col + dc * i;
+        const inp = document.querySelector(`input[data-row="${r}"][data-col="${c}"]`);
+        if (!inp || inp.value.trim().toUpperCase() !== w.word[i].toUpperCase()) {
+          ok = false;
+          break;
+        }
+      }
+      const clueItem = document.getElementById(`clue-${w.num}-${w.dir}`);
+      if (ok) {
+        solvedWords++;
+        if (clueItem) clueItem.classList.add('done');
+      } else {
+        if (clueItem) clueItem.classList.remove('done');
+      }
+    });
+
+    if (correctCells === totalCells) {
+      showStatus(`Чудово! Всі клітинки (${correctCells}/${totalCells}) і всі ${DATA.words.length} слів відгадано правильно!`, 'success');
+    } else {
+      showStatus(`Правильно клітинок: ${correctCells} з ${totalCells}. Відгадано термінів: ${solvedWords} з ${DATA.words.length}.`, 'warn');
+    }
+  }
+
+  function revealSolution() {
+    document.querySelectorAll('.cell.active input').forEach(input => {
+      input.value = input.dataset.char.toUpperCase();
+      input.parentElement.classList.remove('state-wrong');
+      input.parentElement.classList.add('state-correct');
+    });
+    document.querySelectorAll('.clue-item').forEach(el => el.classList.add('done'));
+    showStatus('Відповіді заповнено.', 'success');
+  }
+
+  function clearAll() {
+    if (!confirm('Очистити всі поля?')) return;
+    document.querySelectorAll('.cell.active input').forEach(input => {
+      input.value = '';
+      input.parentElement.classList.remove('state-correct', 'state-wrong');
+    });
+    document.querySelectorAll('.clue-item').forEach(el => el.classList.remove('done'));
+    hideStatus();
+    if (DATA.words.length > 0) {
+      setWord(DATA.words[0].num, DATA.words[0].dir);
+    }
+  }
+
+  function showStatus(text, type) {
+    statusEl.textContent = text;
+    statusEl.className = `status-box ${type}`;
+  }
+
+  function hideStatus() {
+    statusEl.className = 'status-box';
+    statusEl.textContent = '';
+  }
+
+  document.getElementById('btn-check').addEventListener('click', checkGrid);
+  document.getElementById('btn-solution').addEventListener('click', revealSolution);
+  document.getElementById('btn-clear').addEventListener('click', clearAll);
+
+  // Запуск
+  initGrid();
+  initClues();
+  if (DATA.words.length > 0) {
+    setWord(DATA.words[0].num, DATA.words[0].dir);
+  }
+</script>
+
+</body>
+</html>
